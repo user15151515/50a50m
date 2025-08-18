@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intranet Vinted · Gestor intern</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="dark">
+  <!-- CAPÇALERA -->
+  <header class="app-header">
+    <div class="wrap row">
+      <div class="brand"><span class="dot"></span> Intranet Vinted · Gestor intern</div>
+      <div id="summaryBox" class="summary">
+        <span id="summaryLabel" class="label">Resum</span>
+        <span id="summaryAmount" class="amount mono">0,00 €</span>
+        <button id="themeToggle" class="btn ghost tiny" title="Canvia tema">🌙</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- Barra de paquets amb XIPS -->
+    <section class="card compact">
+      <div class="row pkgbar">
+        <div class="left">
+          <div id="pkgChips" class="chips"></div>
+        </div>
+        <div class="right actions">
+          <button id="renamePkgBtn" class="btn ghost tiny" title="Reanomena paquet">✎</button>
+          <button id="deletePkgBtn" class="btn bad tiny" title="Elimina paquet">🗑</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- KPIs del paquet just a sobre de la taula -->
+    <section class="card kpis-block">
+      <div class="pkg-header">
+        <h3 id="pkgTitle" class="section-title">Paquet</h3>
+        <div id="pkgProfit" class="pkg-profit">
+          <span id="pkgProfitBadge" class="badge loss">Pèrdua</span>
+          <span id="pkgProfitAmount" class="amount mono">0,00 €</span>
+        </div>
+      </div>
+         
+      <div class="kpis small-grid">
+        <div class="kpi"><h4>Cost ARTICLES</h4><div class="mono" id="kpiItemsCost">0,00 €</div></div>
+        <div class="kpi"><h4>Cost TOTAL paquet</h4><div class="mono" id="kpiPkgCost">0,00 €</div></div>
+        <div class="kpi"><h4>Ingressos previstos</h4><div class="mono" id="kpiRevenueExp">0,00 €</div></div>
+        <div class="kpi"><h4>Ingressos reals</h4><div class="mono" id="kpiRevenueReal">0,00 €</div></div>
+    </div>
+    </section>
+
+    <!-- Taula d'articles -->
+    <section class="card">
+      <div class="row head-row">
+        <div class="left head-left">
+          <span class="muted small" id="countLabel">0 productes</span>
+          <button id="addItemBtn" class="btn icon" title="Afegir producte">＋</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="table" class="compact-table">
+          <thead>
+            <tr>
+              <th data-sort="name">PRODUCTE</th>
+              <th data-sort="cost" class="right">PREU COMPRA</th>
+              <th data-sort="price" class="right">PREU VENDA</th>
+              <th data-sort="margin" class="right">MARGE (€)</th>
+              <th data-sort="sold">ESTAT</th>
+              <th data-sort="dateSold">DATA VENDA</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Inputs de paquet (descompte i enviament) a la part inferior -->
+    <section class="card compact">
+      <div class="row">
+        <div class="col">
+          <label class="small muted">Descompte del paquet (€)</label>
+          <input id="pkgDiscount" type="number" step="0.01" class="input" placeholder="0">
+        </div>
+        <div class="col">
+          <label class="small muted">Enviament del paquet (€)</label>
+          <input id="pkgShipping" type="number" step="0.01" class="input" placeholder="0">
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal Afegir/Editar producte -->
+  <dialog id="itemDialog">
+    <div class="modal">
+      <h3 id="modalTitle">Afegir producte</h3>
+      <div class="grid">
+        <div>
+          <label class="small muted">Nom</label>
+          <input id="fName" class="input" placeholder="Top negre">
+        </div>
+        <div>
+          <label class="small muted">Enllaç (opcional)</label>
+          <input id="fLink" class="input" placeholder="https://…">
+        </div>
+        <div>
+          <label class="small muted">Preu compra (€)</label>
+          <input id="fCost" type="number" step="0.01" class="input">
+        </div>
+        <div>
+          <label class="small muted">Preu venda (€)</label>
+          <input id="fPrice" type="number" step="0.01" class="input">
+        </div>
+        <div>
+          <label class="small muted">Estat</label>
+          <select id="fSold" class="select">
+            <option value="false">Disponible</option>
+            <option value="true">Venut</option>
+          </select>
+        </div>
+        <div>
+          <label class="small muted">Data venda</label>
+          <input id="fDate" type="date" class="input">
+        </div>
+      </div>
+      <div class="footer-actions">
+        <button id="cancelItem" class="btn ghost">Cancel·lar</button>
+        <button id="saveItem" class="btn">Desar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Firebase (compat) per funcionar obrint el fitxer amb file:// -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  
+  <!-- Analytics desactivat en file:// -->
+  <!-- <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics-compat.js"></script> -->
+
+  <!-- El nostre script NO és mòdul -->
+  <script src="script.js"></script>
+</body>
+</html>
