@@ -55,7 +55,7 @@
     </section>
 
     <!-- Taula d'articles -->
-    <section class="card">
+  <section class="card table-card">
       <div class="row head-row">
         <div class="left head-left">
           <span class="muted small" id="countLabel">0 productes</span>
@@ -73,6 +73,8 @@
               <th data-sort="margin" class="right">MARGE (€)</th>
               <th data-sort="sold">ESTAT</th>
               <th data-sort="dateSold">DATA VENDA</th>
+              <th data-sort="actions">ACCIONS</th>
+
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -143,6 +145,12 @@
   <!-- <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics-compat.js"></script> -->
 
   <!-- El nostre script NO és mòdul -->
+     <!-- Snackbar Undo -->
+  <div id="snackbar" class="snackbar" role="status" aria-live="polite">
+    <span id="snackMsg" class="msg">Canvi fet.</span>
+    <button id="snackUndo" class="undo">Desfés</button>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>

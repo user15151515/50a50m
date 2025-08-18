@@ -130,6 +130,32 @@ const saveItem = document.getElementById('saveItem');
 const pkgProfitBadge  = document.getElementById('pkgProfitBadge');
 const pkgProfitAmount = document.getElementById('pkgProfitAmount');
 
+// ——— Snackbar Undo ———
+const snack = document.getElementById('snackbar');
+const snackMsg = document.getElementById('snackMsg');
+const snackUndo = document.getElementById('snackUndo');
+let snackTimer = null;
+let lastUndo = null;
+
+function showSnack(msg, undoFn){
+  snackMsg.textContent = msg;
+  lastUndo = undoFn || null;
+  snack.classList.add('show');
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(hideSnack, 4000);
+}
+function hideSnack(){
+  snack.classList.remove('show');
+  lastUndo = null;
+}
+if (snackUndo){
+  snackUndo.addEventListener('click', ()=>{
+    if (lastUndo) lastUndo().catch(()=>{}).finally(hideSnack);
+    else hideSnack();
+  });
+}
+
+
 // ---------- Render ----------
 function renderSummary(){
   const g = computeGlobalMetrics();
@@ -148,41 +174,45 @@ function renderPackageControls(){
 
   if (pkgChips){
     pkgChips.innerHTML = '';
-    for(const p of ordered){
-      const m = computePackageMetrics(p);
-      const revenueExp = m.revenueExp || 0;
-      const progress   = revenueExp > 0 ? (m.revenueReal / revenueExp) : 0; // reals / previstos
-      const pct        = Math.max(0, Math.min(150, Math.round(progress * 100))); // capa 150%
-      const potential  = (m.revenueExp - m.pkgCost);
-      const dotClass   = potential >= 0 ? '' : 'neg';
-      const isCurrent  = p.id === state.currentPkgId;
+for (const p of ordered){
+  const m = computePackageMetrics(p);
+  const revenueExp = m.revenueExp || 0;
+  const progress   = revenueExp > 0 ? (m.revenueReal / revenueExp) : 0; // reals / previstos
+  const pct        = Math.max(0, Math.min(150, Math.round(progress * 100))); // capa 150%
+  const potential  = (m.revenueExp - m.pkgCost);
+  const dotClass   = potential >= 0 ? '' : 'neg';
+  const isCurrent  = p.id === state.currentPkgId;
 
-      // 🔁 CAMBIO CLAVE: por defecto SIEMPRE 'potential', incluso si NO está seleccionado
-      const mode = isCurrent ? (state.selectedDisplayMode || 'potential') : 'potential';
-      const valueText = mode === 'potential' ? fmt(potential) : `${pct}%`;
+  // banda de color coherent
+  const band = (pct < 50) ? 'low' : (pct < 100 ? 'mid' : 'win');
 
-      const title = isCurrent
-        ? (mode==='potential'
-            ? `Clica per veure progrés (%). Potencial: ${fmt(potential)}`
-            : `Clica per veure potencial (€). Progrés: ${pct}%`)
-        : `Canvia a aquest paquet`; // al hacer clic, se selecciona y sigue mostrando potencial
+  // per defecte MOSTRA POTENCIAL, encara que no estigui seleccionat
+  const mode = isCurrent ? (state.selectedDisplayMode || 'potential') : 'potential';
+  const valueText = mode === 'potential' ? fmt(potential) : `${pct}%`;
 
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip pb' + (isCurrent ? ' active' : '');
-      b.dataset.id = p.id;
-      b.title = title;
+  const title = isCurrent
+    ? (mode==='potential'
+        ? `Clica per veure progrés (%). Potencial: ${fmt(potential)}`
+        : `Clica per veure potencial (€). Progrés: ${pct}%`)
+    : `Canvia a aquest paquet`;
 
-      b.innerHTML = `
-        <span class="fill" style="--pct:${Math.min(pct,100)}%"></span>
-        <span class="txt">
-          <span class="pkg-name">${escapeHTML(p.name || 'Paquet')}</span>
-          <span class="value mono">${valueText}</span>
-          <i class="dot ${dotClass}" aria-hidden="true"></i>
-        </span>
-      `;
-      pkgChips.appendChild(b);
-    }
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = `chip pb ${band}${isCurrent ? ' active' : ''}`;
+  b.dataset.id = p.id;
+  b.title = title;
+
+  b.innerHTML = `
+    <span class="fill" style="--pct:${Math.min(pct,100)}%"></span>
+    <span class="txt">
+      <span class="pkg-name">${escapeHTML(p.name || 'Paquet')}</span>
+      <span class="value mono">${valueText}</span>
+      <i class="dot ${dotClass}" aria-hidden="true"></i>
+    </span>
+  `;
+  pkgChips.appendChild(b);
+}
+
 
     const add = document.createElement('button');
     add.type='button'; add.className='chip add'; add.id='chipAdd'; add.textContent='＋ Nou paquet';
@@ -196,7 +226,7 @@ function renderPackageControls(){
     pkgSelect.value = state.currentPkgId || ordered[0]?.id || '';
   }
 }
-  
+
 
 function renderKPIs(){
   const pkg = getCurrentPackage();
@@ -413,19 +443,46 @@ function saveItemFromModal(){
       .then(()=> itemDialog.close());
   }
 }
-function toggleSold(id){
-  const pkg=getCurrentPackage(); if(!pkg) return;
-  const it=pkg.items.find(x=>x.id===id); if(!it) return;
-  const sold=!it.sold;
-  db.collection('packages').doc(pkg.id).collection('items').doc(id).update({
-    sold, dateSold: sold ? (it.dateSold || todayISO()) : '', updatedAt: FV.serverTimestamp()
-  }).then(()=>{ renderSummary(); renderKPIs(); });
+async function toggleSold(id){
+  const pkg = getCurrentPackage(); if(!pkg) return;
+  const it = pkg.items.find(x=>x.id===id); if(!it) return;
+
+  const newSold = !it.sold;
+  const prevDate = it.dateSold || '';
+  await db.collection('packages').doc(pkg.id).collection('items').doc(id).update({
+    sold: newSold,
+    dateSold: newSold ? (prevDate || todayISO()) : '',
+    updatedAt: FV.serverTimestamp()
+  });
+  renderSummary(); renderKPIs();
+
+  // prepara Undo: revertir a l'estat anterior
+  showSnack(newSold ? `Marcat com venut: “${it.name}”` : `Desmarcat: “${it.name}”`, async ()=>{
+    await db.collection('packages').doc(pkg.id).collection('items').doc(id).update({
+      sold: it.sold,
+      dateSold: prevDate,
+      updatedAt: FV.serverTimestamp()
+    });
+  });
 }
-function deleteItem(id){
-  const pkg=getCurrentPackage(); if(!pkg) return;
+
+async function deleteItem(id){
+  const pkg = getCurrentPackage(); if(!pkg) return;
+  const it = pkg.items.find(x=>x.id===id); if(!it) return;
   if(!confirm('Eliminar producte?')) return;
-  db.collection('packages').doc(pkg.id).collection('items').doc(id).delete();
+
+  // guarda una còpia local abans d'eliminar
+  const backup = { ...it };
+
+  await db.collection('packages').doc(pkg.id).collection('items').doc(id).delete();
+  showSnack(`Eliminat: “${it.name}”`, async ()=>{
+    // restaura amb el mateix id
+    await db.collection('packages').doc(pkg.id).collection('items').doc(id).set({
+      ...backup, updatedAt: FV.serverTimestamp()
+    });
+  });
 }
+
 
 // ---------- Inline edit (mateixa mida) — NOM editable, ENLLAÇ immutable ----------
 tbody.addEventListener('dblclick', (e)=>{
@@ -584,6 +641,41 @@ applyTheme();
 if(themeToggle){
   themeToggle.addEventListener('click', ()=>{ const cur=document.body.getAttribute('data-theme')==='dark'?'light':'dark'; localStorage.setItem(THEME_KEY,cur); applyTheme(); });
 }
+// ===== Scroll chaining manual per a contenidors de taula =====
+// [TABLE:sticky] + handoff cap al body quan es toca el límit
+function enableScrollHandoff(el){
+  if(!el) return;
+
+  // Ratolí / trackpad
+  el.addEventListener('wheel', (e)=>{
+    const atTop = el.scrollTop <= 0;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    const goingDown = e.deltaY > 0;
+
+    // Si som al límit, “passem” el scroll al window
+    if ((goingDown && atBottom) || (!goingDown && atTop)){
+      e.preventDefault();
+      window.scrollBy({ top: e.deltaY, left: 0, behavior: 'auto' });
+    }
+  }, { passive: false });
+
+  // Tacte (mòbil)
+  let startY = 0;
+  el.addEventListener('touchstart', (e)=>{ startY = e.touches[0].clientY; }, { passive: true });
+  el.addEventListener('touchmove', (e)=>{
+    const delta = startY - e.touches[0].clientY; // + baix, - amunt
+    const atTop = el.scrollTop <= 0;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+
+    if ((delta > 0 && atBottom) || (delta < 0 && atTop)){
+      e.preventDefault();
+      window.scrollBy(0, delta);
+    }
+  }, { passive: false });
+}
+
+// activa-ho per a totes les taules scrollables
+document.querySelectorAll('.card .table-wrap').forEach(enableScrollHandoff);
 
 // ---------- Init ----------
 seedIfEmpty().finally(()=>{ listenPackages(); renderAll(); });
