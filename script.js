@@ -26,7 +26,12 @@ const escapeHTML = s => (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;',
 const asHref = (s)=>{ const v=(s||'').trim(); if(!v) return ''; return /^https?:\/\//i.test(v)? v : 'https://' + v; };
 
 // ---------- Estat ----------
-const state = { packages: [], currentPkgId: null, sort: { key:'name', dir:1 } };
+const state = {
+  packages: [],
+  currentPkgId: null,
+  sort: { key:'name', dir:1 },
+  selectedDisplayMode: 'potential' // 'potential' | 'progress'
+};
 const itemUnsubs = new Map(); // listeners per paquet
 
 // ---------- Seed (opcional) ----------
@@ -134,26 +139,65 @@ function renderSummary(){
   summaryLabel.classList.toggle('profit', profit>=0);
   summaryLabel.classList.toggle('loss', profit<0);
 }
+
 function renderPackageControls(){
-  // Antic -> nou
-  const ordered = [...state.packages].sort((a,b)=> (a.createdAt?.toMillis?.()||0)-(b.createdAt?.toMillis?.()||0));
+  // Antic -> nou perquè els nous apareguin a la dreta
+  const ordered = [...state.packages].sort(
+    (a,b)=> (a.createdAt?.toMillis?.()||0) - (b.createdAt?.toMillis?.()||0)
+  );
+
   if (pkgChips){
     pkgChips.innerHTML = '';
     for(const p of ordered){
+      const m = computePackageMetrics(p);
+      const revenueExp = m.revenueExp || 0;
+      const progress   = revenueExp > 0 ? (m.revenueReal / revenueExp) : 0; // reals / previstos
+      const pct        = Math.max(0, Math.min(150, Math.round(progress * 100))); // capa 150%
+      const potential  = (m.revenueExp - m.pkgCost);
+      const dotClass   = potential >= 0 ? '' : 'neg';
+      const isCurrent  = p.id === state.currentPkgId;
+
+      // 🔁 CAMBIO CLAVE: por defecto SIEMPRE 'potential', incluso si NO está seleccionado
+      const mode = isCurrent ? (state.selectedDisplayMode || 'potential') : 'potential';
+      const valueText = mode === 'potential' ? fmt(potential) : `${pct}%`;
+
+      const title = isCurrent
+        ? (mode==='potential'
+            ? `Clica per veure progrés (%). Potencial: ${fmt(potential)}`
+            : `Clica per veure potencial (€). Progrés: ${pct}%`)
+        : `Canvia a aquest paquet`; // al hacer clic, se selecciona y sigue mostrando potencial
+
       const b = document.createElement('button');
-      b.type='button'; b.className='chip'+(p.id===state.currentPkgId?' active':'');
-      b.dataset.id = p.id; b.textContent = p.name || 'Paquet';
+      b.type = 'button';
+      b.className = 'chip pb' + (isCurrent ? ' active' : '');
+      b.dataset.id = p.id;
+      b.title = title;
+
+      b.innerHTML = `
+        <span class="fill" style="--pct:${Math.min(pct,100)}%"></span>
+        <span class="txt">
+          <span class="pkg-name">${escapeHTML(p.name || 'Paquet')}</span>
+          <span class="value mono">${valueText}</span>
+          <i class="dot ${dotClass}" aria-hidden="true"></i>
+        </span>
+      `;
       pkgChips.appendChild(b);
     }
+
     const add = document.createElement('button');
     add.type='button'; add.className='chip add'; add.id='chipAdd'; add.textContent='＋ Nou paquet';
     pkgChips.appendChild(add);
   }
+
   if (pkgSelect){
-    pkgSelect.innerHTML = ordered.map(p=>`<option value="${p.id}">${escapeHTML(p.name||'Paquet')}</option>`).join('');
+    pkgSelect.innerHTML = ordered
+      .map(p=>`<option value="${p.id}">${escapeHTML(p.name||'Paquet')}</option>`)
+      .join('');
     pkgSelect.value = state.currentPkgId || ordered[0]?.id || '';
   }
 }
+  
+
 function renderKPIs(){
   const pkg = getCurrentPackage();
   if (!pkg) return;
@@ -273,13 +317,17 @@ function listenPackages(){
         if (!itemUnsubs.has(p.id)){
           const unsub = db.collection('packages').doc(p.id).collection('items')
             .orderBy('createdAt','desc')
-            .onSnapshot(itemsSnap=>{
-              const pkg = state.packages.find(x=>x.id===p.id);
-              if (!pkg) return;
-              pkg.items = itemsSnap.docs.map(it => ({ id: it.id, ...it.data() }));
-              if (state.currentPkgId === p.id){ renderRows(); renderKPIs(); }
-              renderSummary();
-            });
+.onSnapshot(itemsSnap=>{
+  const pkg = state.packages.find(x=>x.id===p.id);
+  if (!pkg) return;
+  pkg.items = itemsSnap.docs.map(it => ({ id: it.id, ...it.data() }));
+  if (state.currentPkgId === p.id){ renderRows(); renderKPIs(); }
+  renderSummary();
+  renderPackageControls(); // refresca xips (barres + valor mostrant-se)
+});
+
+
+
           itemUnsubs.set(p.id, unsub);
         }
       }
@@ -491,11 +539,22 @@ if(addPkgBtn)    addPkgBtn.addEventListener('click', addPackage);
 if(pkgChips){
   pkgChips.addEventListener('click', e=>{
     const chip = e.target.closest('.chip'); if(!chip) return;
-    if(chip.id==='chipAdd'){ addPackage(); return; }
+    if(chip.id === 'chipAdd'){ addPackage(); return; }
     const id = chip.dataset.id; if(!id) return;
-    state.currentPkgId = id; renderAll();
+
+    if(id === state.currentPkgId){
+      // mateix paquet → alterna el mode del xip (potencial ↔ progrés)
+      state.selectedDisplayMode = (state.selectedDisplayMode === 'potential') ? 'progress' : 'potential';
+      renderPackageControls();
+    } else {
+      // paquet nou → selecciona i mostra POT per defecte
+      state.currentPkgId = id;
+      state.selectedDisplayMode = 'potential';
+      renderAll();
+    }
   });
 }
+
 if(pkgSelect){
   pkgSelect.addEventListener('change', ()=>{
     state.currentPkgId = pkgSelect.value; renderAll();

@@ -49,6 +49,47 @@
   .chip:hover{background:var(--chip-2)}
   .chip.active{outline:2px solid color-mix(in oklab, var(--accent) 65%, transparent)}
   .chip.add{background:transparent; border-style:dashed}
+
+  /* Chip que és una barra de progrés */
+.chip.pb{
+  position: relative;
+  overflow: hidden;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.chip.pb .fill{
+  position: absolute;
+  inset: 0;
+  width: var(--pct, 0%);
+  background: color-mix(in oklab, var(--ok) 85%, transparent);
+  opacity: .28; /* verd fosc suau que va pujant */
+  pointer-events: none;
+}
+.chip.pb.win .fill{
+  opacity: .35; /* una mica més marcat si ja supera 100% */
+}
+.chip.pb .txt{
+  position: relative; /* sobre la capa de farcit */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.chip.pb .pkg-name{ font-weight: 700; }
+.chip.pb .pct{
+  font-size: .78rem;
+  font-variant-numeric: tabular-nums;
+  opacity: .9;
+}
+.chip.pb .dot{
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ok);
+  opacity: .85;
+}
+.chip.pb .dot.neg{ background: var(--bad); }
+
   
   /* Capçalera de taula */
   .head-left{display:flex; align-items:center; gap:10px}
@@ -172,4 +213,14 @@ dialog .modal .btn.ghost { color: var(--text); }
     .pkg-header{ flex-direction:column; align-items:flex-start; gap:6px; }
   }
   
+  /* ——— Només logo en mòbil ——— */
+/* Només logo (punt blau) en pantalles petites */
+@media (max-width: 560px){
+  .app-header .wrap { padding: 8px 12px; min-height: 52px; }
+  .app-header .brand { display: inline-flex; align-items: center; gap: 8px; }
+  .app-header .brand .brand-title { display: none; } /* amaga el text, queda només el punt */
+  /* opcional: compacta accions/resum si vols una mica més d'espai */
+  .app-header .summary { gap: 8px; }
+}
+
 
