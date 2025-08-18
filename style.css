@@ -213,14 +213,44 @@ dialog .modal .btn.ghost { color: var(--text); }
     .pkg-header{ flex-direction:column; align-items:flex-start; gap:6px; }
   }
   
-  /* ——— Només logo en mòbil ——— */
-/* Només logo (punt blau) en pantalles petites */
+/* —— Capçalera “només logo” + resum centrat en mòbil —— */
 @media (max-width: 560px){
-  .app-header .wrap { padding: 8px 12px; min-height: 52px; }
-  .app-header .brand { display: inline-flex; align-items: center; gap: 8px; }
-  .app-header .brand .brand-title { display: none; } /* amaga el text, queda només el punt */
-  /* opcional: compacta accions/resum si vols una mica més d'espai */
-  .app-header .summary { gap: 8px; }
-}
+  .app-header .wrap{
+    position: relative;
+    height: 56px;         /* en lloc de només min-height */
+    padding: 8px 12px;
+    display: block;       /* com ja tenies */
+  }
+  /* Brand: només el punt blau, fixat a l’esquerra */
+  .app-header .brand {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .app-header .brand .brand-title { display: none; }  /* amaga el text */
 
+  /* El "punt" (per si cal assegurar mides) */
+  .app-header .brand .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+  }
+
+  /* Resum centrat al mig */
+  #summaryBox.summary{
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%); /* centre real en dues direccions */
+    margin: 0;
+    display: inline-flex;             /* conserva el layout intern */
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;              /* evita que salti de línia */
+  }
+}
 
