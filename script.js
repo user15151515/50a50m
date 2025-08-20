@@ -17,38 +17,47 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const FV = firebase.firestore.FieldValue;
 
-// ---------- Utils ----------
+/* ------------------------------------------------------------------ */
+/* Utils                                                              */
+/* ------------------------------------------------------------------ */
 const EURO = new Intl.NumberFormat('ca-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
-const fmt = n => EURO.format(n || 0);
-const todayISO = () => new Date().toISOString().slice(0,10);
-const num = v => (isNaN(+v) ? 0 : +v);
-const escapeHTML = s => (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const asHref = (s)=>{ const v=(s||'').trim(); if(!v) return ''; return /^https?:\/\//i.test(v)? v : 'https://' + v; };
+const fmt       = n => EURO.format(n || 0);
+const todayISO  = () => new Date().toISOString().slice(0,10);
+const num       = v => (isNaN(+v) ? 0 : +v);
+const escapeHTML= s => (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const asHref    = (s)=>{ const v=(s||'').trim(); if(!v) return ''; return /^https?:\/\//i.test(v)? v : 'https://' + v; };
 
-// ---------- Estat ----------
+/* ------------------------------------------------------------------ */
+/* Estat                                                              */
+/* ------------------------------------------------------------------ */
 const state = {
   packages: [],
   currentPkgId: null,
   sort: { key:'name', dir:1 },
-  selectedDisplayMode: 'potential' // 'potential' | 'progress'
+  // Toggle del bloc KPI “Ingressos previstos” <-> “Benefici potencial”
+  showPotential: false
 };
 const itemUnsubs = new Map(); // listeners per paquet
+let __prevPkgProfitValue = null; // per animar només si canvia
 
-// ---------- Seed (opcional) ----------
+
+/* ------------------------------------------------------------------ */
+/* Seed (opcional)                                                    */
+/* ------------------------------------------------------------------ */
 const AUTO_SEED = false;
 const seedItems = [
   { name: 'Camiseta rallas hombro', cost: 7.23, price: 11.0, link: '', sold: false, dateSold: '' },
   { name: 'Vestido rombos naranja', cost: 7.51, price: 12.0, link: '', sold: false, dateSold: '' },
-  { name: 'Top dorado brillo', cost: 7.01, price: 11.0, link: '', sold: false, dateSold: '' },
-  { name: 'Top negro', cost: 5.92, price: 10.0, link: '', sold: false, dateSold: '' },
-  { name: 'Camisa blanca y azul', cost: 10.2, price: 14.0, link: '', sold: false, dateSold: '' },
-  { name: 'Camisa blanca fea', cost: 0.01, price: 5.0, link: '', sold: false, dateSold: '' },
-  { name: 'Blusa negra agujeros', cost: 9.11, price: 13.0, link: '', sold: false, dateSold: '' },
-  { name: 'Vestido carne blanco azul', cost: 7.23, price: 11.8, link: '', sold: false, dateSold: '' },
-  { name: 'Top cruzado salmón', cost: 4.31, price: 8.5, link: '', sold: false, dateSold: '' },
-  { name: 'Top tirantes azul', cost: 2.51, price: 6.0, link: '', sold: false, dateSold: '' },
-  { name: 'Top floral granate', cost: 3.81, price: 7.0, link: '', sold: false, dateSold: '' },
-  { name: 'Top floral blanc', cost: 4.98, price: 8.0, link: '', sold: false, dateSold: '' },
+  { name: 'Top dorado brillo',     cost: 7.01, price: 11.0, link: '', sold: false, dateSold: '' },
+  { name: 'Top negro',             cost: 5.92, price: 10.0, link: '', sold: false, dateSold: '' },
+  { name: 'Camisa blanca y azul',  cost:10.20, price: 14.0, link: '', sold: false, dateSold: '' },
+  { name: 'Camisa blanca fea',     cost: 0.01, price:  5.0, link: '', sold: false, dateSold: '' },
+  { name: 'Blusa negra agujeros',  cost: 9.11, price: 13.0, link: '', sold: false, dateSold: '' },
+  { name: 'Vestido carne blanco azul', cost: 7.23, price:11.8, link:'', sold:false, dateSold:'' },
+  { name: 'Top cruzado salmón',    cost: 4.31, price:  8.5, link: '', sold: false, dateSold: '' },
+  { name: 'Top tirantes azul',     cost: 2.51, price:  6.0, link: '', sold: false, dateSold: '' },
+  { name: 'Top floral granate',    cost: 3.81, price:  7.0, link: '', sold: false, dateSold: '' },
+  { name: 'Top floral blanc',      cost: 4.98, price:  8.0, link: '', sold: false, dateSold: '' },
 ];
 function seedIfEmpty(){
   if(!AUTO_SEED) return Promise.resolve();
@@ -67,20 +76,27 @@ function seedIfEmpty(){
   }).catch(()=>{});
 }
 
-// ---------- Càlculs ----------
-function getCurrentPackage(){ return state.packages.find(p=>p.id===state.currentPkgId) || state.packages[0] || null; }
+/* ------------------------------------------------------------------ */
+/* Càlculs                                                            */
+/* ------------------------------------------------------------------ */
+function getCurrentPackage(){
+  return state.packages.find(p=>p.id===state.currentPkgId) || state.packages[0] || null;
+}
 function computePackageMetrics(pkg){
   if(!pkg) return { itemsCost:0, pkgCost:0, revenueExp:0, revenueReal:0, costReal:0, shares:new Map() };
-  const itemsCost = pkg.items.reduce((s,it)=> s+(it.cost||0), 0);
-  const pkgCost   = itemsCost - (pkg.discount||0) + (pkg.shipping||0);
-  const revenueExp= pkg.items.reduce((s,it)=> s+(it.price||0), 0);
-  const shares = new Map(); // prorrateig del cost total
+  const itemsCost  = pkg.items.reduce((s,it)=> s+(it.cost||0), 0);
+  const pkgCost    = itemsCost - (pkg.discount||0) + (pkg.shipping||0);
+  const revenueExp = pkg.items.reduce((s,it)=> s+(it.price||0), 0);
+
+  // Prorrateig del cost total entre articles segons el seu cost
+  const shares = new Map();
   for(const it of pkg.items){
     const w = itemsCost>0 ? (it.cost||0)/itemsCost : 0;
     shares.set(it.id, pkgCost*w);
   }
-  let revenueReal = 0, costReal=0;
+  let revenueReal=0, costReal=0;
   for(const it of pkg.items) if(it.sold){ revenueReal += (it.price||0); costReal += (shares.get(it.id)||0); }
+
   return { itemsCost, pkgCost, revenueExp, revenueReal, costReal, shares };
 }
 function computeGlobalMetrics(){
@@ -93,51 +109,63 @@ function computeGlobalMetrics(){
   return { profit: revenueReal - totalPkgCost };
 }
 
-// ---------- DOM ----------
-const themeToggle = document.getElementById('themeToggle');
-const pkgChips   = document.getElementById('pkgChips'); // si existeix
-const pkgSelect  = document.getElementById('pkgSelect');
-const addPkgBtn  = document.getElementById('addPkgBtn');
-const renamePkgBtn = document.getElementById('renamePkgBtn');
-const deletePkgBtn = document.getElementById('deletePkgBtn');
+/* ------------------------------------------------------------------ */
+/* DOM refs                                                           */
+/* ------------------------------------------------------------------ */
+const themeToggle   = document.getElementById('themeToggle');
+const pkgChips      = document.getElementById('pkgChips');
+const pkgSelect     = document.getElementById('pkgSelect');
+const addPkgBtn     = document.getElementById('addPkgBtn');
+const renamePkgBtn  = document.getElementById('renamePkgBtn');
+const deletePkgBtn  = document.getElementById('deletePkgBtn');
 
 const summaryLabel  = document.getElementById('summaryLabel');
 const summaryAmount = document.getElementById('summaryAmount');
 
-const pkgTitle = document.getElementById('pkgTitle');
-const kItemsCost = document.getElementById('kpiItemsCost');
-const kPkgCost   = document.getElementById('kpiPkgCost');
-const kRevenueExp= document.getElementById('kpiRevenueExp');
-const kRevenueReal = document.getElementById('kpiRevenueReal');
+const pkgTitle      = document.getElementById('pkgTitle');
+const kItemsCost    = document.getElementById('kpiItemsCost');
+const kPkgCost      = document.getElementById('kpiPkgCost');
+const kRevenueExp   = document.getElementById('kpiRevenueExp');
+const kRevenueReal  = document.getElementById('kpiRevenueReal');
 
-const pkgDiscount = document.getElementById('pkgDiscount');
-const pkgShipping = document.getElementById('pkgShipping');
+// Bloc “Ingressos previstos” (per fer-lo clicable i canviar de vista)
+const kpiRevenueExpWrap  = kRevenueExp ? kRevenueExp.closest('.kpi') : null;
+const kpiRevenueExpTitle = kpiRevenueExpWrap ? kpiRevenueExpWrap.querySelector('h4') : null;
 
-const countLabel = document.getElementById('countLabel');
-const tbody = document.getElementById('tbody');
+const pkgDiscount  = document.getElementById('pkgDiscount');
+const pkgShipping  = document.getElementById('pkgShipping');
 
-const itemDialog = document.getElementById('itemDialog');
-const modalTitle = document.getElementById('modalTitle');
-const fName = document.getElementById('fName');
-const fLink = document.getElementById('fLink');
-const fCost = document.getElementById('fCost');
-const fPrice = document.getElementById('fPrice');
-const fSold = document.getElementById('fSold');
-const fDate = document.getElementById('fDate');
-const cancelItem = document.getElementById('cancelItem');
-const saveItem = document.getElementById('saveItem');
+const countLabel   = document.getElementById('countLabel');
+const tbody        = document.getElementById('tbody');
 
-const pkgProfitBadge  = document.getElementById('pkgProfitBadge');
+const itemDialog   = document.getElementById('itemDialog');
+const modalTitle   = document.getElementById('modalTitle');
+const fName        = document.getElementById('fName');
+const fLink        = document.getElementById('fLink');
+const fCost        = document.getElementById('fCost');
+const fPrice       = document.getElementById('fPrice');
+const fSold        = document.getElementById('fSold');
+const fDate        = document.getElementById('fDate');
+const cancelItem   = document.getElementById('cancelItem');
+const saveItem     = document.getElementById('saveItem');
+
 const pkgProfitAmount = document.getElementById('pkgProfitAmount');
 
-// ——— Snackbar Undo ———
-const snack = document.getElementById('snackbar');
-const snackMsg = document.getElementById('snackMsg');
-const snackUndo = document.getElementById('snackUndo');
-let snackTimer = null;
-let lastUndo = null;
+// Snackbar Undo
+const snack      = document.getElementById('snackbar');
+const snackMsg   = document.getElementById('snackMsg');
+const snackUndo  = document.getElementById('snackUndo');
+let snackTimer   = null;
+let lastUndo     = null;
 
+const bulkMarginEur   = document.getElementById('bulkMarginEur');
+const applyBulkMargin = document.getElementById('applyBulkMargin');
+
+/* ------------------------------------------------------------------ */
+/* Snackbar helpers                                                   */
+/* ------------------------------------------------------------------ */
 function showSnack(msg, undoFn){
+  if(!snack) return;
   snackMsg.textContent = msg;
   lastUndo = undoFn || null;
   snack.classList.add('show');
@@ -145,6 +173,7 @@ function showSnack(msg, undoFn){
   snackTimer = setTimeout(hideSnack, 4000);
 }
 function hideSnack(){
+  if(!snack) return;
   snack.classList.remove('show');
   lastUndo = null;
 }
@@ -155,8 +184,9 @@ if (snackUndo){
   });
 }
 
-
-// ---------- Render ----------
+/* ------------------------------------------------------------------ */
+/* Render                                                             */
+/* ------------------------------------------------------------------ */
 function renderSummary(){
   const g = computeGlobalMetrics();
   const profit = g.profit;
@@ -174,46 +204,25 @@ function renderPackageControls(){
 
   if (pkgChips){
     pkgChips.innerHTML = '';
-for (const p of ordered){
-  const m = computePackageMetrics(p);
-  const revenueExp = m.revenueExp || 0;
-  const progress   = revenueExp > 0 ? (m.revenueReal / revenueExp) : 0; // reals / previstos
-  const pct        = Math.max(0, Math.min(150, Math.round(progress * 100))); // capa 150%
-  const potential  = (m.revenueExp - m.pkgCost);
-  const dotClass   = potential >= 0 ? '' : 'neg';
-  const isCurrent  = p.id === state.currentPkgId;
+    for (const p of ordered){
+      const m = computePackageMetrics(p);
+      const revenueExp = m.revenueExp || 0;
+      const progress   = revenueExp > 0 ? (m.revenueReal / revenueExp) : 0; // reals / previstos
+      const pct        = Math.max(0, Math.min(100, Math.round(progress * 100)));
+      const brokeEven  = (m.revenueReal - m.pkgCost) >= 0; // ja s’ha recuperat la inversió?
+      const isCurrent  = p.id === state.currentPkgId;
 
-  // banda de color coherent
-  const band = (pct < 50) ? 'low' : (pct < 100 ? 'mid' : 'win');
-
-  // per defecte MOSTRA POTENCIAL, encara que no estigui seleccionat
-  const mode = isCurrent ? (state.selectedDisplayMode || 'potential') : 'potential';
-  const valueText = mode === 'potential' ? fmt(potential) : `${pct}%`;
-
-  const title = isCurrent
-    ? (mode==='potential'
-        ? `Clica per veure progrés (%). Potencial: ${fmt(potential)}`
-        : `Clica per veure potencial (€). Progrés: ${pct}%`)
-    : `Canvia a aquest paquet`;
-
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.className = `chip pb ${band}${isCurrent ? ' active' : ''}`;
-  b.dataset.id = p.id;
-  b.title = title;
-
-  b.innerHTML = `
-    <span class="fill" style="--pct:${Math.min(pct,100)}%"></span>
-    <span class="txt">
-      <span class="pkg-name">${escapeHTML(p.name || 'Paquet')}</span>
-      <span class="value mono">${valueText}</span>
-      <i class="dot ${dotClass}" aria-hidden="true"></i>
-    </span>
-  `;
-  pkgChips.appendChild(b);
-}
-
-
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `chip pb ${brokeEven ? 'win' : 'loss'}${isCurrent ? ' active' : ''}`;
+      b.dataset.id = p.id;
+      b.title = isCurrent ? 'Paquet actual' : 'Canvia a aquest paquet';
+      b.innerHTML = `
+        <span class="fill" style="--pct:${pct}%"></span>
+        <span class="txt"><span class="pkg-name">${escapeHTML(p.name || 'Paquet')}</span></span>
+      `;
+      pkgChips.appendChild(b);
+    }
     const add = document.createElement('button');
     add.type='button'; add.className='chip add'; add.id='chipAdd'; add.textContent='＋ Nou paquet';
     pkgChips.appendChild(add);
@@ -227,27 +236,55 @@ for (const p of ordered){
   }
 }
 
-
 function renderKPIs(){
   const pkg = getCurrentPackage();
   if (!pkg) return;
 
   pkgTitle.textContent = pkg.name;
-
   const m = computePackageMetrics(pkg);
 
-  // KPIs de la graella
+  // Costos i ingressos reals (sempre visibles)
   kItemsCost.textContent   = fmt(m.itemsCost);
   kPkgCost.textContent     = fmt(m.pkgCost);
-  kRevenueExp.textContent  = fmt(m.revenueExp);
-  kRevenueReal.textContent = fmt(m.revenueReal); // <-- nou “Ingressos reals”
+  kRevenueReal.textContent = fmt(m.revenueReal);
 
-  // Benefici/Pèrdua real del paquet (sota el títol)
-  const profit = m.revenueReal - m.pkgCost; // pot ser negatiu
-  pkgProfitAmount.textContent = fmt(profit);
-  pkgProfitBadge.textContent  = profit >= 0 ? 'Benefici' : 'Pèrdua';
-  pkgProfitBadge.classList.remove('profit','loss');
-  pkgProfitBadge.classList.add(profit >= 0 ? 'profit' : 'loss');
+  // Bloc toggle: “Ingressos previstos” <-> “Benefici potencial”
+  if (kpiRevenueExpWrap){
+    kpiRevenueExpWrap.classList.add('toggle');
+    // etiqueta
+    if (kpiRevenueExpTitle){
+      kpiRevenueExpTitle.textContent = state.showPotential ? 'Benefici potencial' : 'Ingressos previstos';
+    }
+    // valor
+    if (state.showPotential){
+      const potential = m.revenueExp - m.pkgCost;
+      kRevenueExp.textContent = fmt(potential);
+    } else {
+      kRevenueExp.textContent = fmt(m.revenueExp);
+    }
+  }
+
+// Benefici/Pèrdua real del paquet (a la dreta del títol) — més protagonista
+// Benefici/Pèrdua real del paquet (chip només amb número)
+const profit = m.revenueReal - m.pkgCost; // pot ser negatiu
+
+const pkgProfitBox = document.getElementById('pkgProfit');
+const pkgProfitAmountEl = document.getElementById('pkgProfitAmount');
+
+if (pkgProfitAmountEl) pkgProfitAmountEl.textContent = fmt(profit);
+if (pkgProfitBox){
+  pkgProfitBox.classList.remove('profit','loss','bump');
+  pkgProfitBox.classList.add(profit >= 0 ? 'profit' : 'loss');
+
+  // micro-animació quan canvia
+  if (window.__prevPkgProfitValue === undefined || window.__prevPkgProfitValue !== profit){
+    void pkgProfitBox.offsetWidth; // reflow per reiniciar animació
+    pkgProfitBox.classList.add('bump');
+    window.__prevPkgProfitValue = profit;
+  }
+}
+
+
 }
 
 function renderControls(){
@@ -255,6 +292,7 @@ function renderControls(){
   pkgDiscount.value = (Number(pkg.discount)||0).toFixed(2);
   pkgShipping.value = (Number(pkg.shipping)||0).toFixed(2);
 }
+
 function renderRows(){
   const pkg = getCurrentPackage();
   if(!pkg){ tbody.innerHTML=''; countLabel.textContent='0 productes'; return; }
@@ -264,37 +302,41 @@ function renderRows(){
   const {key, dir} = state.sort;
   rows.sort((a,b)=>{
     let va, vb;
-    if(key==='margin'){ va=(a.price||0)-(m.shares.get(a.id)||0); vb=(b.price||0)-(m.shares.get(b.id)||0); }
-    else { va=a[key]??''; vb=b[key]??''; }
-    return (va<vb?-1:va>vb?1:0)*dir;
+if (key === 'margin') {
+  va = (a.price || 0) - (a.cost || 0);   // marge simple: venda - compra
+  vb = (b.price || 0) - (b.cost || 0);
+} else {
+  va = a[key] ?? '';
+  vb = b[key] ?? '';
+}
+
   });
 
   countLabel.textContent = `${rows.length} productes`;
   tbody.innerHTML='';
   for(const it of rows){
     const allocated = m.shares.get(it.id)||it.cost||0;
-    const margin = (it.price||0)-allocated;
+const margin = (it.price || 0) - (it.cost || 0);  // marge simple: venda - compra
     const tr = document.createElement('tr');
     if(it.sold) tr.classList.add('sold');
     tr.innerHTML = `
       <td class="editable" data-field="name" data-id="${it.id}">
         ${
-          (()=>{
-            const href = asHref(it.link);
+          (()=>{ const href = asHref(it.link);
             return href
               ? `<a class="name-link" href="${escapeHTML(href)}" target="_blank" rel="noopener noreferrer">${escapeHTML(it.name)}</a>`
               : `<span class="name-link">${escapeHTML(it.name)}</span>`;
           })()
         }
       </td>
-      <td class="right mono editable" data-field="cost" data-id="${it.id}">${fmt(it.cost)}</td>
+      <td class="right mono editable" data-field="cost"  data-id="${it.id}">${fmt(it.cost)}</td>
       <td class="right mono editable" data-field="price" data-id="${it.id}">${fmt(it.price)}</td>
       <td class="right mono">${fmt(margin)}</td>
       <td data-field="sold" data-id="${it.id}">${it.sold? '<span class="pill ok">Venut</span>':'<span class="pill">Disponible</span>'}</td>
       <td class="mono editable" data-field="dateSold" data-id="${it.id}">${it.dateSold||''}</td>
       <td class="right"><div class="actions">
         <button class="btn ghost tiny" data-act="toggle" data-id="${it.id}">${it.sold? 'Desmarcar':'Marcar venut'}</button>
-        <button class="btn bad tiny" data-act="del" data-id="${it.id}">Eliminar</button>
+        <button class="btn bad tiny"   data-act="del"    data-id="${it.id}">Eliminar</button>
       </div></td>`;
     tbody.appendChild(tr);
   }
@@ -309,9 +351,18 @@ function renderRows(){
     });
   });
 }
-function renderAll(){ renderSummary(); renderPackageControls(); renderKPIs(); renderControls(); renderRows(); }
 
-// ---------- Listeners Firestore ----------
+function renderAll(){
+  renderSummary();
+  renderPackageControls();
+  renderKPIs();
+  renderControls();
+  renderRows();
+}
+
+/* ------------------------------------------------------------------ */
+/* Listeners Firestore                                                */
+/* ------------------------------------------------------------------ */
 let unsubPkgs = null;
 function listenPackages(){
   if (unsubPkgs) unsubPkgs();
@@ -347,17 +398,14 @@ function listenPackages(){
         if (!itemUnsubs.has(p.id)){
           const unsub = db.collection('packages').doc(p.id).collection('items')
             .orderBy('createdAt','desc')
-.onSnapshot(itemsSnap=>{
-  const pkg = state.packages.find(x=>x.id===p.id);
-  if (!pkg) return;
-  pkg.items = itemsSnap.docs.map(it => ({ id: it.id, ...it.data() }));
-  if (state.currentPkgId === p.id){ renderRows(); renderKPIs(); }
-  renderSummary();
-  renderPackageControls(); // refresca xips (barres + valor mostrant-se)
-});
-
-
-
+            .onSnapshot(itemsSnap=>{
+              const pkg = state.packages.find(x=>x.id===p.id);
+              if (!pkg) return;
+              pkg.items = itemsSnap.docs.map(it => ({ id: it.id, ...it.data() }));
+              if (state.currentPkgId === p.id){ renderRows(); renderKPIs(); }
+              renderSummary();
+              renderPackageControls(); // refresca xips (barres)
+            });
           itemUnsubs.set(p.id, unsub);
         }
       }
@@ -371,14 +419,15 @@ function listenPackages(){
   });
 }
 
-// ---------- Paquets ----------
+/* ------------------------------------------------------------------ */
+/* Paquets (CRUD)                                                     */
+/* ------------------------------------------------------------------ */
 function addPackage(){
   const name = prompt('Nom del nou paquet:', `Paquet ${state.packages.length+1}`); if(!name) return;
   db.collection('packages').add({
     name: name.trim(), discount:0, shipping:0,
     createdAt: FV.serverTimestamp(), updatedAt: FV.serverTimestamp()
   }).then(ref=>{
-    // selecciona immediatament el nou paquet i mostra 0 productes
     state.currentPkgId = ref.id;
     state.packages.push({ id: ref.id, name: name.trim(), discount:0, shipping:0, items:[] });
     renderPackageControls(); renderControls(); renderRows(); renderKPIs();
@@ -400,7 +449,9 @@ function deletePackage(){
   });
 }
 
-// ---------- Items ----------
+/* ------------------------------------------------------------------ */
+/* Items (CRUD)                                                       */
+/* ------------------------------------------------------------------ */
 let editingId = null;
 function openItemEditor(id=null){
   const pkg = getCurrentPackage(); const it = id? pkg.items.find(x=>x.id===id): null;
@@ -445,25 +496,19 @@ function saveItemFromModal(){
 }
 async function toggleSold(id){
   const pkg = getCurrentPackage(); if(!pkg) return;
-  const it = pkg.items.find(x=>x.id===id); if(!it) return;
+  const it  = pkg.items.find(x => x.id === id); if(!it) return;
 
   const newSold = !it.sold;
   const prevDate = it.dateSold || '';
+
   await db.collection('packages').doc(pkg.id).collection('items').doc(id).update({
     sold: newSold,
     dateSold: newSold ? (prevDate || todayISO()) : '',
     updatedAt: FV.serverTimestamp()
   });
-  renderSummary(); renderKPIs();
 
-  // prepara Undo: revertir a l'estat anterior
-  showSnack(newSold ? `Marcat com venut: “${it.name}”` : `Desmarcat: “${it.name}”`, async ()=>{
-    await db.collection('packages').doc(pkg.id).collection('items').doc(id).update({
-      sold: it.sold,
-      dateSold: prevDate,
-      updatedAt: FV.serverTimestamp()
-    });
-  });
+  renderSummary();
+  renderKPIs();
 }
 
 async function deleteItem(id){
@@ -471,22 +516,22 @@ async function deleteItem(id){
   const it = pkg.items.find(x=>x.id===id); if(!it) return;
   if(!confirm('Eliminar producte?')) return;
 
-  // guarda una còpia local abans d'eliminar
   const backup = { ...it };
-
   await db.collection('packages').doc(pkg.id).collection('items').doc(id).delete();
   showSnack(`Eliminat: “${it.name}”`, async ()=>{
-    // restaura amb el mateix id
     await db.collection('packages').doc(pkg.id).collection('items').doc(id).set({
       ...backup, updatedAt: FV.serverTimestamp()
     });
   });
 }
 
-
-// ---------- Inline edit (mateixa mida) — NOM editable, ENLLAÇ immutable ----------
+/* ------------------------------------------------------------------ */
+/* Inline edit (mateixa mida) — nom editable, link immutable          */
+/* ------------------------------------------------------------------ */
 tbody.addEventListener('dblclick', (e)=>{
   const td = e.target.closest('td.editable'); if(!td) return;
+  const tr = td.closest('tr');
+if (tr && tr.classList.contains('sold')) return; // no editar venuts
   const field = td.dataset.field || (td.classList.contains('editable') && td.querySelector('.name-link') ? 'name' : '');
   const id = td.dataset.id || td.closest('tr')?.querySelector('[data-id]')?.dataset.id;
   if(!field || !id) return;
@@ -498,21 +543,16 @@ tbody.addEventListener('dblclick', (e)=>{
   const prevHTML = td.innerHTML;
   let cancelled = false;
 
-  td.classList.add('editing');
-  td.innerHTML = '';
+  td.classList.add('editing'); td.innerHTML = '';
 
   const wrap  = document.createElement('div');
   wrap.className = 'cell-editor';
   Object.assign(wrap.style, { position:'absolute', inset:'0', display:'flex', alignItems:'center', background:'transparent' });
 
   const input = document.createElement('input');
-  if(field==='name'){
-    input.type='text';
-    input.value = it.name || '';
-  } else if(field==='dateSold'){
-    input.type='date';
-    input.value = it.dateSold || '';
-  } else {
+  if(field==='name'){ input.type='text'; input.value = it.name || ''; }
+  else if(field==='dateSold'){ input.type='date'; input.value = it.dateSold || ''; }
+  else {
     input.type='text'; input.inputMode='decimal'; input.pattern='[0-9]*[.,]?[0-9]*';
     input.value = (it[field] ?? 0).toString();
     if (td.classList.contains('right')) input.style.textAlign = 'right';
@@ -571,14 +611,16 @@ tbody.addEventListener('dblclick', (e)=>{
   requestAnimationFrame(()=>{ input.focus(); input.select && input.select(); });
 });
 
-// Click a la píndola per canviar estat
+// Click a la píndola ESTAT per canviar sold
 tbody.addEventListener('click', e=>{
   const pill = e.target.closest('.pill'); if(!pill) return;
   const td = pill.closest('td[data-field="sold"]'); if(!td) return;
   toggleSold(td.dataset.id);
 });
 
-// ---------- Events UI ----------
+/* ------------------------------------------------------------------ */
+/* Events UI                                                          */
+/* ------------------------------------------------------------------ */
 Array.from(document.querySelectorAll('th[data-sort]')).forEach(th=>{
   th.addEventListener('click', ()=>{
     const key=th.dataset.sort; state.sort={ key, dir:(state.sort.key===key? -state.sort.dir : 1) }; renderRows();
@@ -593,32 +635,34 @@ if(renamePkgBtn) renamePkgBtn.addEventListener('click', renamePackage);
 if(deletePkgBtn) deletePkgBtn.addEventListener('click', deletePackage);
 if(addPkgBtn)    addPkgBtn.addEventListener('click', addPackage);
 
+// Xips: selecció de paquet
 if(pkgChips){
   pkgChips.addEventListener('click', e=>{
     const chip = e.target.closest('.chip'); if(!chip) return;
     if(chip.id === 'chipAdd'){ addPackage(); return; }
     const id = chip.dataset.id; if(!id) return;
-
-    if(id === state.currentPkgId){
-      // mateix paquet → alterna el mode del xip (potencial ↔ progrés)
-      state.selectedDisplayMode = (state.selectedDisplayMode === 'potential') ? 'progress' : 'potential';
-      renderPackageControls();
-    } else {
-      // paquet nou → selecciona i mostra POT per defecte
+    if (id !== state.currentPkgId){
       state.currentPkgId = id;
-      state.selectedDisplayMode = 'potential';
       renderAll();
     }
   });
 }
-
 if(pkgSelect){
   pkgSelect.addEventListener('change', ()=>{
     state.currentPkgId = pkgSelect.value; renderAll();
   });
 }
 
-// Inputs paquet (guardar en sortir del camp)
+// Bloc KPI “Ingressos previstos” <-> “Benefici potencial”
+if (kpiRevenueExpWrap){
+  kpiRevenueExpWrap.classList.add('toggle'); // estil de “clicable”
+  kpiRevenueExpWrap.addEventListener('click', ()=>{
+    state.showPotential = !state.showPotential;
+    renderKPIs();
+  });
+}
+
+// Inputs de paquet (persistim en sortir del camp)
 pkgDiscount.addEventListener('change', ()=>{
   const pkg=getCurrentPackage(); if(!pkg) return;
   const val = num(pkgDiscount.value);
@@ -636,23 +680,29 @@ pkgShipping.addEventListener('change', ()=>{
 
 // Tema clar/fosc
 const THEME_KEY='intranet-theme';
-function applyTheme(){ const t=localStorage.getItem(THEME_KEY)||'dark'; document.body.setAttribute('data-theme',t); if(themeToggle) themeToggle.textContent=t==='dark'?'🌙':'☀️'; }
+function applyTheme(){
+  const t=localStorage.getItem(THEME_KEY)||'dark';
+  document.body.setAttribute('data-theme',t);
+  if(themeToggle) themeToggle.textContent=t==='dark'?'🌙':'☀️';
+}
 applyTheme();
 if(themeToggle){
-  themeToggle.addEventListener('click', ()=>{ const cur=document.body.getAttribute('data-theme')==='dark'?'light':'dark'; localStorage.setItem(THEME_KEY,cur); applyTheme(); });
+  themeToggle.addEventListener('click', ()=>{
+    const cur=document.body.getAttribute('data-theme')==='dark'?'light':'dark';
+    localStorage.setItem(THEME_KEY,cur); applyTheme();
+  });
 }
-// ===== Scroll chaining manual per a contenidors de taula =====
-// [TABLE:sticky] + handoff cap al body quan es toca el límit
+
+/* ------------------------------------------------------------------ */
+/* Scroll handoff (quan s’acaba la taula, continua el body)           */
+/* ------------------------------------------------------------------ */
 function enableScrollHandoff(el){
   if(!el) return;
-
   // Ratolí / trackpad
   el.addEventListener('wheel', (e)=>{
     const atTop = el.scrollTop <= 0;
     const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
     const goingDown = e.deltaY > 0;
-
-    // Si som al límit, “passem” el scroll al window
     if ((goingDown && atBottom) || (!goingDown && atTop)){
       e.preventDefault();
       window.scrollBy({ top: e.deltaY, left: 0, behavior: 'auto' });
@@ -666,16 +716,56 @@ function enableScrollHandoff(el){
     const delta = startY - e.touches[0].clientY; // + baix, - amunt
     const atTop = el.scrollTop <= 0;
     const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-
     if ((delta > 0 && atBottom) || (delta < 0 && atTop)){
       e.preventDefault();
       window.scrollBy(0, delta);
     }
   }, { passive: false });
 }
-
-// activa-ho per a totes les taules scrollables
+// Activa-ho per a totes les taules scrollables
 document.querySelectorAll('.card .table-wrap').forEach(enableScrollHandoff);
 
-// ---------- Init ----------
+// otros a ordenar
+
+function round2(n){ return Math.round((+n + Number.EPSILON) * 100) / 100; }
+async function applyBulkMarginToCurrentPackage(){
+  const pkg = getCurrentPackage(); if(!pkg) return;
+  const eur = num(bulkMarginEur.value);
+  if (!isFinite(eur)) return;
+
+  const batch = firebase.firestore().batch();
+  const priceBackup = [];
+
+  for (const it of (pkg.items || [])){
+    if (it.sold) continue; // només disponibles
+    const newPrice = round2((it.cost || 0) + eur);
+    const ref = db.collection('packages').doc(pkg.id).collection('items').doc(it.id);
+    priceBackup.push({ id: it.id, old: it.price || 0 });
+    batch.update(ref, { price: newPrice, updatedAt: FV.serverTimestamp() });
+  }
+
+  if (priceBackup.length === 0){
+    showSnack('No hi ha articles disponibles a actualitzar');
+    return;
+  }
+
+  await batch.commit();
+  showSnack(`Aplicat marge de ${fmt(eur)} a ${priceBackup.length} article(s)`, async ()=>{
+    // UNDO
+    const undoBatch = firebase.firestore().batch();
+    for (const p of priceBackup){
+      const ref = db.collection('packages').doc(pkg.id).collection('items').doc(p.id);
+      undoBatch.update(ref, { price: p.old, updatedAt: FV.serverTimestamp() });
+    }
+    await undoBatch.commit();
+  });
+}
+
+if (applyBulkMargin){
+  applyBulkMargin.addEventListener('click', applyBulkMarginToCurrentPackage);
+}
+
+/* ------------------------------------------------------------------ */
+/* Init                                                               */
+/* ------------------------------------------------------------------ */
 seedIfEmpty().finally(()=>{ listenPackages(); renderAll(); });

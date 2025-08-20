@@ -39,29 +39,33 @@
     <!-- KPIs del paquet just a sobre de la taula -->
     <section class="card kpis-block">
       <div class="pkg-header">
-        <h3 id="pkgTitle" class="section-title">Paquet</h3>
-        <div id="pkgProfit" class="pkg-profit">
-          <span id="pkgProfitBadge" class="badge loss">Pèrdua</span>
-          <span id="pkgProfitAmount" class="amount mono">0,00 €</span>
-        </div>
-      </div>
+  <h3 id="pkgTitle" class="section-title">Paquet 1</h3>
+  <div id="pkgProfit" class="pkg-profit">
+    <span id="pkgProfitAmount" class="amount mono">-54,83&nbsp;€</span>
+  </div>
+</div>
+
          
       <div class="kpis small-grid">
-        <div class="kpi"><h4>Cost ARTICLES</h4><div class="mono" id="kpiItemsCost">0,00 €</div></div>
-        <div class="kpi"><h4>Cost TOTAL paquet</h4><div class="mono" id="kpiPkgCost">0,00 €</div></div>
-        <div class="kpi"><h4>Ingressos previstos</h4><div class="mono" id="kpiRevenueExp">0,00 €</div></div>
+        <div class="kpi"><h4>Cost articles</h4><div class="mono" id="kpiItemsCost">0,00 €</div></div>
+        <div class="kpi"><h4>Cost total</h4><div class="mono" id="kpiPkgCost">0,00 €</div></div>
+        <div class="kpi"><h4>Ingressos potencials</h4><div class="mono" id="kpiRevenueExp">0,00 €</div></div>
         <div class="kpi"><h4>Ingressos reals</h4><div class="mono" id="kpiRevenueReal">0,00 €</div></div>
     </div>
     </section>
 
     <!-- Taula d'articles -->
   <section class="card table-card">
-      <div class="row head-row">
-        <div class="left head-left">
-          <span class="muted small" id="countLabel">0 productes</span>
-          <button id="addItemBtn" class="btn icon" title="Afegir producte">＋</button>
-        </div>
-      </div>
+<div class="row head-row">
+  <div class="left">
+    <span class="muted small" id="countLabel">0 productes</span>
+  </div>
+  <div class="right">
+    <button id="addItemBtn" class="btn add-product" title="Afegir producte">
+      <span class="plus">＋</span> Afegir producte
+    </button>
+  </div>
+</div>
 
       <div class="table-wrap">
         <table id="table" class="compact-table">
@@ -84,16 +88,26 @@
 
     <!-- Inputs de paquet (descompte i enviament) a la part inferior -->
     <section class="card compact">
-      <div class="row">
-        <div class="col">
-          <label class="small muted">Descompte del paquet (€)</label>
-          <input id="pkgDiscount" type="number" step="0.01" class="input" placeholder="0">
-        </div>
-        <div class="col">
-          <label class="small muted">Enviament del paquet (€)</label>
-          <input id="pkgShipping" type="number" step="0.01" class="input" placeholder="0">
-        </div>
-      </div>
+<div class="row bulk-row">
+<div class="col col-bulk">
+  <label class="small muted">Marge global (€)</label>
+  <div class="bulk-inline">
+    <input id="bulkMarginEur" type="number" step="0.01" class="input" placeholder="ex. 2.50">
+    <button id="applyBulkMargin" class="btn ghost tiny">Aplicar marge</button>
+  </div>
+</div>
+
+
+  <div class="col">
+    <label class="small muted">Descompte del paquet (€)</label>
+    <input id="pkgDiscount" type="number" step="0.01" class="input" placeholder="0">
+  </div>
+  <div class="col">
+    <label class="small muted">Enviament del paquet (€)</label>
+    <input id="pkgShipping" type="number" step="0.01" class="input" placeholder="0">
+  </div>
+</div>
+
     </section>
   </main>
 
@@ -144,8 +158,6 @@
   <!-- Analytics desactivat en file:// -->
   <!-- <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-analytics-compat.js"></script> -->
 
-  <!-- El nostre script NO és mòdul -->
-     <!-- Snackbar Undo -->
   <div id="snackbar" class="snackbar" role="status" aria-live="polite">
     <span id="snackMsg" class="msg">Canvi fet.</span>
     <button id="snackUndo" class="undo">Desfés</button>
