@@ -70,10 +70,6 @@ body{
 .btn.tiny{ padding:6px 8px; border-radius:10px }
 .btn.icon{ width:34px; height:34px; padding:0; display:inline-flex; align-items:center; justify-content:center; border-radius:999px }
 
-/* micro-animacions coherents */
-.btn, .chip, .pill, .name-link{
-  transition: background .18s ease, color .18s ease, border-color .18s ease, transform .1s ease;
-}
 .chip:hover{ transform: translateY(-1px); }
 .btn:active, .chip:active{ transform: translateY(0); }
 @media (prefers-reduced-motion: reduce){ *{ transition:none!important; animation:none!important } }
@@ -86,7 +82,7 @@ body{
 
 /* =============================== [LAYOUT] ============================ */
 .section-title{ margin:0 0 6px 0 }
-.card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:12px; overflow:visible }
+.card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:12px; overflow:visible; margin: 10px; }
 .card.compact{ padding:10px }
 .wrap > .card{ margin:14px 0 0 } .wrap > .card:first-of-type{ margin-top:0 }
 
@@ -201,13 +197,21 @@ body{
 #table thead th{ color:var(--muted); font-weight:600; text-align:left; font-size:.86rem; cursor:pointer }
 #table.compact-table tbody td, #table.compact-table thead th{ padding:8px 8px }
 #table tbody tr{ background:var(--card); border:1px solid var(--line); transition:transform .16s ease, box-shadow .16s ease, background .16s ease }
-#table tbody tr:hover{ transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,.18) }
 #table tbody tr td:first-child{ border-top-left-radius:10px; border-bottom-left-radius:10px }
 #table tbody tr td:last-child{  border-top-right-radius:10px; border-bottom-right-radius:10px }
 #table tbody tr.sold{
   background:color-mix(in oklab, var(--ok) 10%, var(--card));
   border-color:color-mix(in oklab, var(--ok) 30%, var(--line))
 }
+
+/* Zebra suau també per a files venudes */
+#table tbody tr.sold:nth-child(even){
+  background: color-mix(in oklab, var(--ok) 10%, var(--card));
+}
+#table tbody tr.sold:nth-child(odd){
+  background: color-mix(in oklab, var(--ok) 20%, var(--card));
+}
+
 .right{ text-align:right }
 .editable{ cursor:text }
 .pill{
@@ -371,4 +375,69 @@ input[type="number"]{ -moz-appearance:textfield; appearance:textfield }
     margin:0; display:inline-flex; align-items:center; justify-content:center; white-space:nowrap;
   }
 }
+
+
+
+/* ========================= [UTILITY] ============================ */
+.hidden{ display:none !important; }
+
+/* ============================== [KPIS+:color] =================== */
+.kpis .kpi{
+  position: relative;
+  padding:12px;
+  border-radius:12px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--kpi, var(--accent)) 12%, transparent), transparent);
+  border:1px solid var(--line);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.093);
+}
+.kpis .kpi::before{
+  content:"";
+  position:absolute; left:10px; right:10px; top:8px; height:3px;
+  border-radius:999px; background:var(--kpi, var(--accent)); opacity:.75;
+}
+.kpis .kpi h4{
+  margin-top:6px;
+  color: color-mix(in oklab, var(--kpi, var(--accent)) 70%, var(--muted));
+  font-weight:700;
+  letter-spacing:.2px;
+}
+.kpis .kpi div{ font-size:1.2rem; font-weight:800 }
+.kpis .kpi[data-variant="accent"]{ --kpi: var(--accent) }
+.kpis .kpi[data-variant="ok"]{ --kpi: var(--ok) }
+.kpis .kpi[data-variant="warn"]{ --kpi: var(--warn) }
+.kpis .kpi[data-variant="bad"]{ --kpi: var(--bad) }
+
+/* Hover micro-lift */
+.kpis .kpi{ transition: transform .16s ease, box-shadow .16s ease }
+.kpis .kpi:hover{ transform: translateY(-2px); box-shadow:0 2px 4px rgba(0, 0, 0, 0.094) }
+/* KPIs estil únic (sense multicolor) */
+#statsView .kpis .kpi{ --kpi: var(--accent) !important; }
+#statsView .kpis .kpi h4{color: color-mix(in oklab, var(--accent) 70%, var(--muted));}
+
+/* ============================== [DRAWER] ======================== */
+.drawer{ position:fixed; inset:0; z-index:60; pointer-events:none }
+.drawer .backdrop{
+  position:absolute; inset:0; background:rgba(0,0,0,.45); opacity:0;
+  transition: opacity .18s ease;
+}
+.drawer .panel{
+  position:absolute; top:0; bottom:0; left:0; width:280px;
+  background:var(--card); border-right:1px solid var(--line);
+  transform:translateX(-100%); transition: transform .22s ease;
+  padding:14px;
+}
+.drawer.show{ pointer-events:auto }
+.drawer.show .backdrop{ opacity:1 }
+.drawer.show .panel{ transform:translateX(0) }
+
+.drawer .nav{ display:flex; flex-direction:column; gap:6px; margin-top:8px }
+.drawer .nav a{
+  display:flex; align-items:center; gap:10px; padding:10px 12px;
+  color:var(--text); text-decoration:none; border-radius:10px;
+  border:1px solid transparent;
+
+}
+.drawer .nav a:hover{ background:var(--chip) }
+.drawer .nav a.active{ background:var(--chip); border-color:var(--line) }
 

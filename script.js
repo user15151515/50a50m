@@ -769,3 +769,147 @@ if (applyBulkMargin){
 /* Init                                                               */
 /* ------------------------------------------------------------------ */
 seedIfEmpty().finally(()=>{ listenPackages(); renderAll(); });
+
+
+/* ------------------------------------------------------------------ */
+/* Drawer & Views                                                     */
+/* ------------------------------------------------------------------ */
+const menuBtn         = document.getElementById('menuBtn');
+const drawer          = document.getElementById('drawer');
+const drawerBackdrop  = document.getElementById('drawerBackdrop');
+const navDashboard    = document.getElementById('navDashboard');
+const navStats        = document.getElementById('navStats');
+const dashboardView   = document.getElementById('dashboardView');
+const statsView       = document.getElementById('statsView');
+
+ function openDrawer(){
+   if(!drawer) return;
+   const onStats = statsView && !statsView.classList.contains('hidden');
+   setActiveNav(onStats ? 'stats' : 'dash');
+   drawer.classList.add('show');
+ }function closeDrawer(){ if(drawer) drawer.classList.remove('show'); }
+function setActiveNav(which){
+  if(!navDashboard || !navStats) return;
+  navDashboard.classList.toggle('active', which==='dash');
+  navStats.classList.toggle('active', which==='stats');
+}
+
+function showDashboard(){
+  if(dashboardView) dashboardView.classList.remove('hidden');
+  if(statsView) statsView.classList.add('hidden');
+  setActiveNav('dash');
+}
+function showStats(){
+  if(statsView) statsView.classList.remove('hidden');
+  if(dashboardView) dashboardView.classList.add('hidden');
+  setActiveNav('stats');
+  renderStats();
+}
+
+window.addEventListener('load', () => {
+  const drawer         = document.getElementById('drawer');
+  const drawerBackdrop = document.getElementById('drawerBackdrop');
+  const navDashboard   = document.getElementById('navDashboard');
+  const navStats       = document.getElementById('navStats');
+
+  if (menuBtn) menuBtn.addEventListener('click', () => { if (drawer) drawer.classList.add('show'); });
+  if (drawerBackdrop) drawerBackdrop.addEventListener('click', () => { if (drawer) drawer.classList.remove('show'); });
+
+  if (navDashboard) navDashboard.addEventListener('click', (e) => { e.preventDefault(); if (drawer) drawer.classList.remove('show'); showDashboard(); });
+  if (navStats)     navStats.addEventListener('click', (e) => { e.preventDefault(); if (drawer) drawer.classList.remove('show'); showStats(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && drawer) drawer.classList.remove('show');
+  });
+});
+
+
+/* ------------------------------------------------------------------ */
+/* Stats                                                              */
+/* ------------------------------------------------------------------ */
+function collectAllItems(){
+  const items = [];
+  for(const p of state.packages){
+    for(const it of (p.items||[])){
+      items.push({ pkgId:p.id, ...it });
+    }
+  }
+  return items;
+}
+
+function computeStats(){
+  const items = collectAllItems();
+  const total = items.length;
+  const sold  = items.filter(it=>it.sold);
+  const avail = total - sold.length;
+
+  const avg = (arr)=> arr.length? arr.reduce((s,v)=>s+v,0)/arr.length : 0;
+
+const avgCostAll  = avg(items.map(it=> num(it.cost)));
+const avgSellSold = avg(sold.map(it=> num(it.price)));
+const avgMarginE  = avg(sold.map(it=> num(it.price) - num(it.cost)));
+  const avgMarginP  = (function(){
+ const m = sold.map(it=>{
+ const price = num(it.price), cost = num(it.cost);
+    return price>0 ? (price - cost) / price : 0;
+ });
+
+      return price>0 ? (price - cost) / price : 0;
+    });
+
+return {
+  total, sold: sold.length, avail,
+  str: total? (sold.length/total) : 0,
+  avgCostAll, avgSellSold, avgMarginE, avgMarginP
+};
+
+}
+
+function renderStats(){
+  const s = computeStats();
+
+  const setTxt = (id, txt)=>{ const el=document.getElementById(id); if(el) el.textContent = txt; };
+
+  setTxt('sTotal', String(s.total));
+  setTxt('sSold', String(s.sold));
+  setTxt('sAvail', String(s.avail));
+  setTxt('sSTR', (s.str*100).toFixed(0) + '%');
+  setTxt('sAvgCost', fmt(s.avgCostAll));
+  setTxt('sAvgSell', fmt(s.avgSellSold));
+  setTxt('sAvgMarginEur', fmt(s.avgMarginE));
+  setTxt('sAvgMarginPct', (s.avgMarginP*100).toFixed(0) + '%');
+
+}
+
+// --- helpers de dates robustes ---
+function parseAnyDate(val){
+  if(!val) return null;
+  if(val instanceof Date) return val;
+  if(typeof val === 'number') { const d=new Date(val); return isNaN(d)?null:d; }
+  if(typeof val === 'string'){
+    const s = val.trim();
+
+    // ISO, 2025-08-23, 2025/08/23, incloent hores
+    const dISO = new Date(s);
+    if(!isNaN(dISO)) return dISO;
+
+    // DD/MM/YYYY o DD-MM-YYYY
+    let m = s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+    if(m){
+      let [,dd,mm,yyyy] = m;
+      if(yyyy.length===2) yyyy = '20'+yyyy;
+      const d = new Date(+yyyy, +mm-1, +dd);
+      return isNaN(d) ? null : d;
+    }
+
+    // YYYY.MM.DD o YYYY/MM/DD
+    m = s.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})$/);
+    if(m){
+      const [,yyyy,mm,dd] = m;
+      const d = new Date(+yyyy, +mm-1, +dd);
+      return isNaN(d) ? null : d;
+    }
+  }
+  return null;
+}
+function ymKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
